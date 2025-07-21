@@ -1,41 +1,37 @@
 package com.denni5x.cobblet.client.Objects;
 
 import com.denni5x.cobblet.client.CobbletTool;
+import com.denni5x.cobblet.client.Objects.Theme.Theme;
+import com.denni5x.cobblet.client.Objects.Theme.ThemeConfig;
 import com.moulberry.axiom.gizmo.Gizmo;
 import com.moulberry.axiom.render.regions.ChunkedBlockRegion;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 
 
-public class CobbletObject {
-    public static Logger LOGGER = LoggerFactory.getLogger(CobbletObject.class);
-    public final CobbletTool cobbletTool;
+public abstract class CobbletObject {
+
+
     public ChunkedBlockRegion chunkedBlockRegion;
-    public Gizmo mainMoveGizmo;
     public ArrayList<Gizmo> gizmos;
+    public Gizmo mainMoveGizmo;
     public Gizmo wallPos1Gizmo;
     public Gizmo wallPos2Gizmo;
     public int[] position;
     public int[] size;
-    protected final boolean isRecord;
+    protected CobbletTool cobbletTool;
+    protected boolean isRecord;
+    protected Theme theme;
+    protected ThemeConfig themeConfig;
 
-    public CobbletObject(CobbletTool cobbletTool, boolean isRecord) {
-        this.cobbletTool = cobbletTool;
-        this.isRecord = isRecord;
-        this.gizmos = new ArrayList<>();
-        this.chunkedBlockRegion = new ChunkedBlockRegion();
+
+    public Theme getType() {
+        return this.theme;
     }
 
-    public void updateGizmoState() {
-        if (this.isRecord) return;
-        if (this.cobbletTool != null) {
-            this.cobbletTool.setRecentSize(size, this);
-        }
-    }
+    public abstract void updateGizmoState();
 
-    public void updateGizmosFromPositionSize() {
+    public abstract void updateGizmosFromPositionSize();
 
-    }
+    public abstract boolean renderSettings();
 }

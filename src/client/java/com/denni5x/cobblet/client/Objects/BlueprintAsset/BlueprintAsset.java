@@ -3,23 +3,29 @@ package com.denni5x.cobblet.client.Objects.BlueprintAsset;
 import com.denni5x.cobblet.client.CobbletTool;
 import com.denni5x.cobblet.client.Objects.CobbletObject;
 import com.moulberry.axiom.blueprint.Blueprint;
+import com.moulberry.axiom.editor.ImGuiHelper;
 import com.moulberry.axiom.gizmo.Gizmo;
+import com.moulberry.axiom.i18n.AxiomI18n;
 import com.moulberry.axiom.tools.stamp.StampPlacement;
 import com.moulberry.axiom.tools.stamp.TransformedBlockRegions;
+import imgui.ImGui;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
 
+import java.text.NumberFormat;
+
 public class BlueprintAsset extends CobbletObject {
 
-    private int[] offset;
     public int rotation;
     public boolean flipX = false;
     public boolean flipZ = false;
+    private int[] offset;
     private Blueprint blueprint;
 
     public BlueprintAsset(CobbletTool cobbletTool, int[] position, boolean isRecord, Blueprint blueprint, int[] offset) {
-        super(cobbletTool, isRecord);
+        super.cobbletTool = cobbletTool;
+        super.isRecord = isRecord;
         super.position = position;
         this.offset = offset;
         this.blueprint = blueprint;
@@ -38,9 +44,9 @@ public class BlueprintAsset extends CobbletObject {
         this.mainMoveGizmo.enableScale = false;
     }
 
+    @Override
     public void updateGizmoState() {
         this.position = new int[]{this.mainMoveGizmo.getTargetPosition().getX(), this.mainMoveGizmo.getTargetPosition().getY(), this.mainMoveGizmo.getTargetPosition().getZ()};
-        super.updateGizmoState();
     }
 
     public void calcBlocks() {
@@ -77,9 +83,43 @@ public class BlueprintAsset extends CobbletObject {
         this.mainMoveGizmo.moveTo(new BlockPos(this.position[0], this.position[1], this.position[2]));
     }
 
-    public void setRotation(int rotation) {
-        this.rotation = Math.abs(this.rotation + rotation);
+    @Override
+    public boolean renderSettings() {
+        boolean changed = false;
+        ImGui.pushID(super.cobbletTool.currentlySelected);
+        ImGui.imageButton(this.blueprint.thumbnail().getGlId(), 64.0F, 64.0F, 0.0F, 1.0F, 1.0F, 0.0F, 2);
+        if (ImGui.isItemClicked(1)) {
+            ImGui.openPopup("##EditBlueprintAsset" + super.cobbletTool.currentlySelected);
+        }
+
+        if (ImGuiHelper.beginPopup("##EditBlueprintAsset" + super.cobbletTool.currentlySelected)) {
+            if (ImGui.menuItem(AxiomI18n.get("axiom.tool.path.remove"))) {
+                this.setBlueprint(null);
+                super.cobbletTool.cobbletObjects.remove(super.cobbletTool.currentlySelected);
+                super.cobbletTool.currentlySelected = -1;
+                changed = true;
+            }
+            ImGui.endPopup();
+        }
+
+        ImGui.sameLine();
+        ImGui.beginGroup();
+        String name = blueprint.header().name();
+        boolean blankName = name.isBlank();
+        String displayName = !blankName ? name : AxiomI18n.get("axiom.editorui.window.blueprint_browser.unnamed_blueprint");
+        String formattedCount = NumberFormat.getNumberInstance().format(blueprint.blockRegion().count());
+        String blockCount = AxiomI18n.get("axiom.editorui.window.clipboard.n_blocks", formattedCount);
+        ImGui.text(displayName + " (" + blockCount + ")");
+        if (ImGuiHelper.inputInt(AxiomI18n.get("axiom.tool.stamp.offset") + "##" + super.cobbletTool.currentlySelected, this.offset, true)) {
+            if (!blankName) {
+                this.setOffset(this.offset);
+            }
+        }
+        ImGui.endGroup();
+        ImGui.popID();
+        return changed;
     }
+
 
     public void rotate() {
         if (this.rotation == 0) {
@@ -89,13 +129,13 @@ public class BlueprintAsset extends CobbletObject {
         }
     }
 
+    public Blueprint getBlueprint() {
+        return this.blueprint;
+    }
+
     public void setBlueprint(Blueprint blueprint) {
         this.blueprint = blueprint;
         this.calcBlocks();
-    }
-
-    public Blueprint getBlueprint() {
-        return this.blueprint;
     }
 
     public void setOffset(int[] offset) {

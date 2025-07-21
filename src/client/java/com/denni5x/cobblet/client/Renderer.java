@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 
 public class Renderer {
+    private final CobbletTool cobbletTool;
     private Vec3d lookDirection;
     private boolean isLeftDown;
     private boolean isCtrlDown;
@@ -25,7 +26,6 @@ public class Renderer {
     private int currentlySelected;
     private Matrix4f projection;
     private float opacity;
-    private final CobbletTool cobbletTool;
 
     public Renderer(CobbletTool cobbletTool) {
         this.cobbletTool = cobbletTool;
@@ -66,6 +66,15 @@ public class Renderer {
         }
     }
 
+    public void renderBlocks(CobbletObject gladeObject) {
+        float blockOpacity = this.opacity;
+        if (gladeObject.wallPos1Gizmo != null && gladeObject.wallPos1Gizmo.isHovered()) blockOpacity = 0.3f;
+        if (gladeObject.wallPos2Gizmo != null && gladeObject.wallPos2Gizmo.isHovered()) blockOpacity = 0.3f;
+        if (gladeObject.mainMoveGizmo != null && gladeObject.mainMoveGizmo.isHovered()) blockOpacity = 0.3f;
+        gladeObject.chunkedBlockRegion.render(camera, Vec3d.ZERO, matrices, projection, blockOpacity, 0f);
+    }
+
+
     public void renderDeselectedObjectWSingleGizmo(CobbletObject gladeObject) {
         gladeObject.mainMoveGizmo.update(time, lookDirection, isLeftDown, isCtrlDown, showGizmo);
         gladeObject.mainMoveGizmo.setAxisDirections(
@@ -103,14 +112,6 @@ public class Renderer {
         }
     }
 
-    public void renderBlocks(CobbletObject gladeObject) {
-        float blockOpacity = this.opacity;
-        if (gladeObject.wallPos1Gizmo != null && gladeObject.wallPos1Gizmo.isHovered()) blockOpacity = 0.3f;
-        if (gladeObject.wallPos2Gizmo != null && gladeObject.wallPos2Gizmo.isHovered()) blockOpacity = 0.3f;
-        if (gladeObject.mainMoveGizmo != null && gladeObject.mainMoveGizmo.isHovered()) blockOpacity = 0.3f;
-        gladeObject.chunkedBlockRegion.render(camera, Vec3d.ZERO, matrices, projection, blockOpacity, 0f);
-    }
-
     public void renderDeselectedObjectWMultiGizmo(CobbletObject gladeObject) {
         gladeObject.mainMoveGizmo.update(time, lookDirection, isLeftDown, isCtrlDown, showGizmo);
         gladeObject.mainMoveGizmo.setAxisDirections(
@@ -118,7 +119,9 @@ public class Renderer {
                 camera.getPos().y > (double) gladeObject.mainMoveGizmo.getTargetPosition().getY(),
                 camera.getPos().z > (double) gladeObject.mainMoveGizmo.getTargetPosition().getZ());
 
-        if (showGizmo || gladeObject.wallPos1Gizmo.isGrabbed() || gladeObject.wallPos2Gizmo.isGrabbed() || gladeObject.mainMoveGizmo.isGrabbed()) {
+        if (showGizmo || gladeObject.wallPos1Gizmo.isGrabbed() ||
+                gladeObject.wallPos2Gizmo.isGrabbed() ||
+                gladeObject.mainMoveGizmo.isGrabbed()) {
             gladeObject.mainMoveGizmo.render(matrices, camera, isCtrlDown);
         }
     }

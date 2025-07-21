@@ -6,9 +6,7 @@ import com.denni5x.cobblet.client.Objects.BlueprintAsset.BlueprintAsset;
 import com.denni5x.cobblet.client.Objects.CobbletObject;
 import com.denni5x.cobblet.client.Objects.House.House;
 import com.denni5x.cobblet.client.Objects.House.HouseRoofType;
-import com.denni5x.cobblet.client.Objects.Theme.Theme;
 import com.denni5x.cobblet.client.Objects.Tower.Tower;
-import com.denni5x.cobblet.client.Objects.Tower.TowerRoofType;
 import com.moulberry.axiom.RayCaster;
 import com.moulberry.axiom.Restrictions;
 import com.moulberry.axiom.UserAction;
@@ -26,7 +24,6 @@ import com.moulberry.axiom.operations.AutoshadeShading;
 import com.moulberry.axiom.render.Effects;
 import com.moulberry.axiom.render.SharedBrushPreviewRenderer;
 import com.moulberry.axiom.render.regions.ChunkedBlockRegion;
-import com.moulberry.axiom.render.regions.ChunkedBooleanRegion;
 import com.moulberry.axiom.services.RegionProvider;
 import com.moulberry.axiom.tools.Tool;
 import com.moulberry.axiom.tools.ToolManager;
@@ -35,7 +32,6 @@ import com.moulberry.axiom.utils.PositionUtils;
 import com.moulberry.axiom.utils.RegionHelper;
 import com.moulberry.axiom.world_modification.HistoryEntry;
 import imgui.ImGui;
-import imgui.type.ImInt;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.block.SlabBlock;
@@ -64,6 +60,7 @@ import org.slf4j.LoggerFactory;
 import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Predicate;
 
 public class CobbletTool implements Tool {
@@ -73,27 +70,23 @@ public class CobbletTool implements Tool {
 
     static {
         selectBlockWidget = new SelectBlockWidget(false);
-        blockPercentages = new ArrayList();
+        blockPercentages = new ArrayList<>();
         blockPercentages.add(new BlockWithFloat((CustomBlockState) Blocks.DEEPSLATE.getDefaultState(), new float[]{20.0F}));
         blockPercentages.add(new BlockWithFloat((CustomBlockState) Blocks.TUFF.getDefaultState(), new float[]{35.0F}));
         blockPercentages.add(new BlockWithFloat((CustomBlockState) Blocks.ANDESITE.getDefaultState(), new float[]{45.0F}));
         blockPercentages.add(new BlockWithFloat((CustomBlockState) Blocks.STONE.getDefaultState(), new float[]{60.0F}));
     }
 
-    private final ChunkedBooleanRegion previewRegion;
+    public final House recentHouseSettings;
+    public final Tower recentTowerSettings;
+    public final BlueprintAsset blueprintAsset;
     private final int[] mode;
-    private final House recentHouseSettings;
-    private final Tower recentTowerSettings;
-    private final BlueprintAsset blueprintAsset;
     private final Renderer renderer;
-    private final ArrayList<createBlockRegionUndoOperation> history;
     private final float[] opacity;
     public int currentlySelected;
-    private ArrayList<CobbletObject> cobbletObjects = null;
+    public ArrayList<CobbletObject> cobbletObjects = null;
     private CobbletObject copiedCobbletObject;
-    private boolean prevHistWasBlockRegion;
     private boolean keepExisting;
-    private int currentHistoryIndex;
     private boolean changeAutoshadePalette = false;
     private boolean doAutoTexture = false;
 
@@ -101,13 +94,9 @@ public class CobbletTool implements Tool {
         this.keepExisting = false;
         RegionProvider regionProvider = new RegionProvider();
         this.currentlySelected = -1;
-        this.previewRegion = new ChunkedBooleanRegion();
         this.cobbletObjects = new ArrayList<>();
         this.mode = new int[]{0};
         this.renderer = new Renderer(this);
-        this.prevHistWasBlockRegion = false;
-        this.history = new ArrayList<>();
-        this.currentHistoryIndex = -1;
         this.opacity = new float[]{0.7f};
         this.recentHouseSettings = new House(new int[]{8, 4, 8}, this, true);
         this.recentTowerSettings = new Tower(new int[]{12, 20, 12}, this, true);
@@ -135,15 +124,6 @@ public class CobbletTool implements Tool {
                     return !VoxelShapes.matchesAnywhere(pasteShape, existingShape, BooleanBiFunction.ONLY_SECOND);
                 }
             }
-        }
-    }
-
-    public void setRecentSize(int[] size, CobbletObject cobbletObject) {
-        if (cobbletObject instanceof House) {
-            this.recentHouseSettings.size = size;
-        }
-        if (cobbletObject instanceof Tower) {
-            this.recentTowerSettings.size = size;
         }
     }
 
@@ -191,14 +171,19 @@ public class CobbletTool implements Tool {
             ImGuiHelper.setupBorder();
             ImGuiHelper.separatorWithText("Object Settings");
             if (this.cobbletObjects.get(this.currentlySelected) instanceof House house) {
-                this.displayHouseSettings(house);
+                if (house.renderSettings()) {
+                    this.recentHouseSettings.updateSettings(house.getType(), house.getRoofType(), house.getSteppedGableType(), house.getRoofOrientation());
+                    this.addHistory(HistoryAction.OBJECT_SETTING);
+                }
             }
-
             if (this.cobbletObjects.get(this.currentlySelected) instanceof Tower tower) {
-                this.displayTowerSettings(tower);
+                if (tower.renderSettings()) {
+                    this.recentTowerSettings.updateSettings(tower.getType(), tower.getRoofType(), tower.getConeRounding(), tower.getRoofSizeY(), tower.getRoofOffset(), tower.getSize());
+                    this.addHistory(HistoryAction.OBJECT_SETTING);
+                }
             }
-            if (this.cobbletObjects.get(this.currentlySelected) instanceof BlueprintAsset blueprintAsset) {
-                this.displayBlueprintAssetSettings(blueprintAsset);
+            if (this.cobbletObjects.get(this.currentlySelected) instanceof BlueprintAsset blueprint) {
+                blueprint.renderSettings();
             }
             ImGuiHelper.finishBorder();
         }
@@ -238,8 +223,8 @@ public class CobbletTool implements Tool {
                 Predicate<Blueprint> callback = (blueprintx) -> {
                     if (ToolManager.isToolActive() && ToolManager.getCurrentTool() instanceof CobbletTool) {
                         int[] offset = new int[3];
-                        int minY = blueprintx.blockRegion().min().getY();
-                        int maxY = blueprintx.blockRegion().max().getY();
+                        int minY = Objects.requireNonNull(blueprintx.blockRegion().min()).getY();
+                        int maxY = Objects.requireNonNull(blueprintx.blockRegion().max()).getY();
                         offset[1] = (minY + maxY) / 2 - minY;
                         this.blueprintAsset.setOffset(offset);
                         this.blueprintAsset.setBlueprint(blueprintx);
@@ -283,149 +268,6 @@ public class CobbletTool implements Tool {
         }
     }
 
-    public void displayHouseSettings(House house) {
-        boolean objectSettingsChanged = false;
-        boolean roofOrientation = house.getRoofOrientation() == Direction.Axis.X;
-        int[] roofTypeInt = new int[]{HouseRoofType.valueOf(house.getRoofType().name()).ordinal()};
-        int[] houseType = new int[]{Theme.valueOf(house.getHouseType().name()).ordinal()};
-        int[] bpFullWallOffsetXAxis = house.getBpFullWallOffsetXAxis().clone();
-        int[] bpFullWallOffsetZAxis = house.getBpFullWallOffsetZAxis().clone();
-        int[] bpTopWallOffsetXAxis = house.getBpTopWallOffsetXAxis().clone();
-        int[] bpTopWallOffsetZAxis = house.getBpTopWallOffsetZAxis().clone();
-        int[] bpInnerFloorOffset = house.getInnerFloorPatternOffset().clone();
-        ImInt steppedGableType = new ImInt(house.getSteppedGableType());
-
-
-        objectSettingsChanged |= ImGuiHelper.combo("House Type", houseType,
-                new String[]{"Bricks", "Plain", "Desert", "Noordigrad"});
-        objectSettingsChanged |= ImGuiHelper.combo("Roof Type", roofTypeInt,
-                new String[]{"Stepped Gable", "Gable", "Square Gable", "Tower", "Wall Pattern", "Walled",
-                        "Thick Walled", "Slabbed", "Thick Gable", "Low Angle", "High Angle", "Flat",});
-        HouseRoofType houseRoofType = HouseRoofType.values()[roofTypeInt[0]];
-
-        if (houseRoofType == HouseRoofType.STEPPED_GABLE) {
-            objectSettingsChanged |= ImGui.radioButton("Slabs", steppedGableType, 0);
-            ImGui.sameLine();
-            objectSettingsChanged |= ImGui.radioButton("Stairs", steppedGableType, 1);
-            ImGui.sameLine();
-            objectSettingsChanged |= ImGui.radioButton("Full", steppedGableType, 2);
-            ImGui.sameLine();
-            ImGui.text("Stepped Roof Types");
-        }
-
-        ImGuiHelper.setupBorder();
-        ImGuiHelper.separatorWithText("Pattern Offsets");
-        objectSettingsChanged |= ImGuiHelper.inputInt("Walls X", bpFullWallOffsetXAxis);
-        objectSettingsChanged |= ImGuiHelper.inputInt("Walls Z", bpFullWallOffsetZAxis);
-        objectSettingsChanged |= ImGuiHelper.inputInt("Inner Floors", bpInnerFloorOffset);
-        if (houseRoofType == HouseRoofType.WALL_PATTERN) {
-            objectSettingsChanged |= ImGuiHelper.inputInt("Top Walls X", bpTopWallOffsetXAxis);
-            objectSettingsChanged |= ImGuiHelper.inputInt("Top Walls Z", bpTopWallOffsetZAxis);
-        }
-        ImGuiHelper.finishBorder();
-
-        if (objectSettingsChanged) {
-            house.setBpFullWallOffsetXAxis(bpFullWallOffsetXAxis);
-            house.setBpFullWallOffsetZAxis(bpFullWallOffsetZAxis);
-            house.setBpTopWallOffsetXAxis(bpTopWallOffsetXAxis);
-            house.setBpTopWallOffsetZAxis(bpTopWallOffsetZAxis);
-            house.setInnerFloorPatternOffset(bpInnerFloorOffset);
-            house.updateSettings(Theme.values()[houseType[0]], houseRoofType, steppedGableType.get(), roofOrientation ? Direction.Axis.X : Direction.Axis.Z);
-            this.recentHouseSettings.updateSettings(Theme.values()[houseType[0]], houseRoofType, steppedGableType.get(), roofOrientation ? Direction.Axis.X : Direction.Axis.Z);
-            this.addHistory(HistoryAction.OBJECT_SETTING);
-        }
-    }
-
-    public void displayTowerSettings(Tower tower) {
-        boolean objectSettingsChanged = false;
-        int[] roofTypeInt = new int[]{TowerRoofType.valueOf(tower.getRoofType().name()).ordinal()};
-        int[] towerType = new int[]{Theme.valueOf(tower.getTowerType().name()).ordinal()};
-        float[] coneRounding = new float[]{tower.getConeRounding()};
-        int[] roofSizeY = new int[]{tower.getRoofSizeY()};
-        int[] towerRoofOffset = new int[]{tower.getTowerRoofOffset()};
-        int[] size = tower.getSize();
-        int[] height = new int[]{size[1]};
-        int[] width = new int[]{size[0]};
-
-        objectSettingsChanged |= ImGuiHelper.combo("Tower Type", towerType, new String[]{"Bricks", "Plain", "Desert"});
-        objectSettingsChanged |= ImGuiHelper.combo("Roof Type", roofTypeInt, new String[]{"Cone", "Half Sphere", "Offset Sphere", "Slabbed", "Flat"});
-        TowerRoofType towerRoofType = TowerRoofType.values()[roofTypeInt[0]];
-
-        ImGuiHelper.separatorWithText("General Settings");
-        if (!tower.unlockXZWidth) {
-            objectSettingsChanged |= ImGui.sliderInt(AxiomI18n.get("axiom.tool.shape.height") + "##TowerHeight", height, 1, 64);
-            objectSettingsChanged |= ImGui.sliderInt(AxiomI18n.get("axiom.tool.shape.width") + "##TowerWidth", width, 1, 64);
-            if (height[0] < 1) height[0] = 1;
-            if (width[0] < 1) height[0] = 1;
-            size[0] = width[0];
-            size[1] = height[0];
-            size[2] = width[0];
-        } else {
-            if (ImGuiHelper.inputInt("Tower Size", size)) {
-                for (int i = 0; i < 2; i++) {
-                    if (size[i] < 1) size[i] = 1;
-                }
-                objectSettingsChanged = true;
-            }
-        }
-        if (ImGui.checkbox("Unlock Width", tower.unlockXZWidth)) {
-            tower.unlockXZWidth = !tower.unlockXZWidth;
-        }
-
-        ImGuiHelper.separatorWithText("Roof Settings");
-        if (towerRoofType == TowerRoofType.OFFSET_SPHERE || towerRoofType == TowerRoofType.HALF_SPHERE || towerRoofType == TowerRoofType.CONE) {
-            objectSettingsChanged |= ImGui.sliderInt(AxiomI18n.get("axiom.tool.shape.height") + "##SizeY", roofSizeY, 1, 64);
-        }
-        if (towerRoofType == TowerRoofType.OFFSET_SPHERE) {
-            objectSettingsChanged |= ImGui.sliderInt("Roof Offset" + "##RoofOffset", towerRoofOffset, -64, 64);
-        }
-        if (towerRoofType == TowerRoofType.CONE) {
-            objectSettingsChanged |= ImGui.sliderFloat(AxiomI18n.get("axiom.tool.shape.cone.rounding"), coneRounding, 0.0F, 1.0F);
-        }
-
-        if (objectSettingsChanged) {
-            tower.updateSettings(Theme.values()[towerType[0]], towerRoofType, coneRounding[0], roofSizeY[0], towerRoofOffset[0], size);
-            this.recentTowerSettings.updateSettings(Theme.values()[towerType[0]], towerRoofType, coneRounding[0], roofSizeY[0], towerRoofOffset[0], size);
-            this.addHistory(HistoryAction.OBJECT_SETTING);
-        }
-    }
-
-    public void displayBlueprintAssetSettings(BlueprintAsset blueprintAsset) {
-        boolean objectSettingsChanged = false;
-        Blueprint blueprint = blueprintAsset.getBlueprint();
-        int[] offsets = blueprintAsset.getOffsets();
-        ImGui.pushID(this.currentlySelected);
-        ImGui.imageButton(blueprint.thumbnail().getGlId(), 64.0F, 64.0F, 0.0F, 1.0F, 1.0F, 0.0F, 2);
-        if (ImGui.isItemClicked(1)) {
-            ImGui.openPopup("##EditBlueprintAsset" + this.currentlySelected);
-        }
-
-        if (ImGuiHelper.beginPopup("##EditBlueprintAsset" + this.currentlySelected)) {
-            if (ImGui.menuItem(AxiomI18n.get("axiom.tool.path.remove"))) {
-                blueprintAsset.setBlueprint(null);
-                this.cobbletObjects.remove(this.currentlySelected);
-                this.currentlySelected = -1;
-            }
-            ImGui.endPopup();
-        }
-
-        ImGui.sameLine();
-        ImGui.beginGroup();
-        String name = blueprint.header().name();
-        boolean blankName = name.isBlank();
-        String displayName = !blankName ? name : AxiomI18n.get("axiom.editorui.window.blueprint_browser.unnamed_blueprint");
-        String formattedCount = NumberFormat.getNumberInstance().format(blueprint.blockRegion().count());
-        String blockCount = AxiomI18n.get("axiom.editorui.window.clipboard.n_blocks", formattedCount);
-        ImGui.text(displayName + " (" + blockCount + ")");
-        if (ImGuiHelper.inputInt(AxiomI18n.get("axiom.tool.stamp.offset") + "##" + this.currentlySelected, offsets, true)) {
-            if (!blankName) {
-                blueprintAsset.setOffset(offsets);
-            }
-        }
-        ImGui.endGroup();
-        ImGui.popID();
-    }
-
     public void restoreBlockRegion(List<CobbletObject> cobbletObjects, int currentlySelected) {
         this.currentlySelected = currentlySelected;
         this.cobbletObjects.clear();
@@ -446,7 +288,11 @@ public class CobbletTool implements Tool {
             case ROTATE_PLACEMENT -> {
                 if (!this.cobbletObjects.isEmpty() && this.currentlySelected >= 0) {
                     if (this.cobbletObjects.get(this.currentlySelected) instanceof House house) {
-                        if (house.getRoofType() == HouseRoofType.STEPPED_GABLE || house.getHouseRoofType() == HouseRoofType.GABLE || house.getHouseRoofType() == HouseRoofType.THICK_GABLE || house.getHouseRoofType() == HouseRoofType.LOW_ANGLE || house.getHouseRoofType() == HouseRoofType.HIGH_ANGLE) {
+                        if (house.getRoofType() == HouseRoofType.STEPPED_GABLE ||
+                                house.getRoofType() == HouseRoofType.GABLE ||
+                                house.getRoofType() == HouseRoofType.THICK_GABLE ||
+                                house.getRoofType() == HouseRoofType.LOW_ANGLE ||
+                                house.getRoofType() == HouseRoofType.HIGH_ANGLE) {
                             Direction.Axis roofOrientation = house.getRoofOrientation() == Direction.Axis.X ? Direction.Axis.Z : Direction.Axis.X;
                             house.updateSettings(roofOrientation);
                             this.recentHouseSettings.updateSettings(roofOrientation);
@@ -516,13 +362,6 @@ public class CobbletTool implements Tool {
 //                    this.history.get(this.currentHistoryIndex).perform();
 //                }
                 yield UserAction.ActionResult.USED_CONT;
-            }
-            case SCROLL -> {
-                UserAction.ScrollAmount scrollObject = (UserAction.ScrollAmount) object;
-                if (this.handleScroll(scrollObject.scrollY())) {
-                    yield UserAction.ActionResult.USED_STOP;
-                }
-                yield UserAction.ActionResult.NOT_HANDLED;
             }
             case COPY -> {
                 if (copy()) {
@@ -609,7 +448,6 @@ public class CobbletTool implements Tool {
 
         this.cobbletObjects.clear();
         this.currentlySelected = -1;
-        this.prevHistWasBlockRegion = true;
     }
 
     public ChunkedBlockRegion doAutoTexture(ChunkedBlockRegion chunkedBlockRegion) {
@@ -697,126 +535,6 @@ public class CobbletTool implements Tool {
 //            this.history.add(new createUndoOperation(historyAction, copyCobbletObject, this.currentlySelected));
 //            LOGGER.info("ADD: i{} h{} {}", this.currentHistoryIndex, this.history.size(), copyCobbletObject);
 //        }
-    }
-
-    public boolean handleScroll(int scroll) {
-        if (this.currentlySelected >= 0 && !this.cobbletObjects.isEmpty()) {
-            Vec3d lookDirection = Tool.getLookDirection();
-            if (lookDirection == null) {
-                return false;
-            }
-            Direction[] directions = PositionUtils.orderedByNearest(lookDirection);
-            Direction mainDirection = directions[0];
-            if (mainDirection == null) {
-                return false;
-            }
-
-            CobbletObject cobbletObject = this.cobbletObjects.get(this.currentlySelected);
-            HistoryAction historyAction;
-
-            if (cobbletObject.mainMoveGizmo != null && cobbletObject.mainMoveGizmo.enableAxes) {
-                historyAction = switch (mainDirection) {
-                    case WEST -> {
-                        cobbletObject.position[0] -= scroll;
-                        yield scroll > 0 ? HistoryAction.SCROLL_MG_XN : HistoryAction.SCROLL_MG_XP;
-                    }
-                    case EAST -> {
-                        cobbletObject.position[0] += scroll;
-                        yield scroll > 0 ? HistoryAction.SCROLL_MG_XP : HistoryAction.SCROLL_MG_XN;
-                    }
-                    case DOWN -> {
-                        cobbletObject.position[1] -= scroll;
-                        yield scroll > 0 ? HistoryAction.SCROLL_MG_YN : HistoryAction.SCROLL_MG_YP;
-                    }
-                    case UP -> {
-                        cobbletObject.position[1] += scroll;
-                        yield scroll > 0 ? HistoryAction.SCROLL_MG_YP : HistoryAction.SCROLL_MG_YN;
-                    }
-                    case NORTH -> {
-                        cobbletObject.position[2] -= scroll;
-                        yield scroll > 0 ? HistoryAction.SCROLL_MG_ZN : HistoryAction.SCROLL_MG_ZP;
-                    }
-                    case SOUTH -> {
-                        cobbletObject.position[2] += scroll;
-                        yield scroll > 0 ? HistoryAction.SCROLL_MG_ZP : HistoryAction.SCROLL_MG_ZN;
-                    }
-                };
-                cobbletObject.updateGizmosFromPositionSize();
-                this.addHistory(historyAction);
-                return true;
-            }
-
-            if (cobbletObject.wallPos1Gizmo != null && cobbletObject.wallPos1Gizmo.enableAxes) {
-                historyAction = switch (mainDirection) {
-                    case WEST -> {
-                        cobbletObject.position[0] -= scroll;
-                        cobbletObject.size[0] += scroll;
-                        yield scroll > 0 ? HistoryAction.SCROLL_FG_XN : HistoryAction.SCROLL_FG_XP;
-                    }
-                    case EAST -> {
-                        cobbletObject.position[0] += scroll;
-                        cobbletObject.size[0] -= scroll;
-                        yield scroll > 0 ? HistoryAction.SCROLL_FG_XP : HistoryAction.SCROLL_FG_XN;
-                    }
-                    case DOWN -> {
-                        cobbletObject.position[1] -= scroll;
-                        cobbletObject.size[1] += scroll;
-                        yield scroll > 0 ? HistoryAction.SCROLL_FG_YN : HistoryAction.SCROLL_FG_YP;
-                    }
-                    case UP -> {
-                        cobbletObject.position[1] += scroll;
-                        cobbletObject.size[1] -= scroll;
-                        yield scroll > 0 ? HistoryAction.SCROLL_FG_YP : HistoryAction.SCROLL_FG_YN;
-                    }
-                    case NORTH -> {
-                        cobbletObject.position[2] -= scroll;
-                        cobbletObject.size[2] += scroll;
-                        yield scroll > 0 ? HistoryAction.SCROLL_FG_ZN : HistoryAction.SCROLL_FG_ZP;
-                    }
-                    case SOUTH -> {
-                        cobbletObject.position[2] += scroll;
-                        cobbletObject.size[2] -= scroll;
-                        yield scroll > 0 ? HistoryAction.SCROLL_FG_ZP : HistoryAction.SCROLL_FG_ZN;
-                    }
-                };
-                cobbletObject.updateGizmosFromPositionSize();
-                this.addHistory(historyAction);
-                return true;
-            }
-
-            if (cobbletObject.wallPos2Gizmo != null && cobbletObject.wallPos2Gizmo.enableAxes) {
-                historyAction = switch (mainDirection) {
-                    case WEST -> {
-                        cobbletObject.size[0] -= scroll;
-                        yield scroll > 0 ? HistoryAction.SCROLL_SG_XN : HistoryAction.SCROLL_SG_XP;
-                    }
-                    case EAST -> {
-                        cobbletObject.size[0] += scroll;
-                        yield scroll > 0 ? HistoryAction.SCROLL_SG_XP : HistoryAction.SCROLL_SG_XN;
-                    }
-                    case DOWN -> {
-                        cobbletObject.size[1] -= scroll;
-                        yield scroll > 0 ? HistoryAction.SCROLL_SG_YN : HistoryAction.SCROLL_SG_YP;
-                    }
-                    case UP -> {
-                        cobbletObject.size[1] += scroll;
-                        yield scroll > 0 ? HistoryAction.SCROLL_SG_YP : HistoryAction.SCROLL_SG_YN;
-                    }
-                    case NORTH -> {
-                        cobbletObject.size[2] -= scroll;
-                        yield scroll > 0 ? HistoryAction.SCROLL_SG_ZN : HistoryAction.SCROLL_SG_ZP;
-                    }
-                    case SOUTH -> {
-                        cobbletObject.size[2] += scroll;
-                        yield scroll > 0 ? HistoryAction.SCROLL_SG_ZP : HistoryAction.SCROLL_SG_ZN;
-                    }
-                };
-                cobbletObject.updateGizmosFromPositionSize();
-                this.addHistory(historyAction);
-                return true;
-            }
-        }
-        return false;
     }
 
     private boolean copy() {
@@ -957,17 +675,24 @@ public class CobbletTool implements Tool {
     }
 
     private @NotNull BlueprintAsset getBlueprintAsset(BlockPos from) {
-        return new BlueprintAsset(this, new int[]{from.getX(), from.getY(), from.getZ()}, false, this.blueprintAsset.getBlueprint(), this.blueprintAsset.getOffsets());
+        return new BlueprintAsset(this, new int[]{from.getX(), from.getY(), from.getZ()},
+                false, this.blueprintAsset.getBlueprint(), this.blueprintAsset.getOffsets());
     }
 
     private @NotNull Tower getTower(BlockPos from) {
         Tower recent = this.recentTowerSettings;
-        return new Tower(new int[]{from.getX(), from.getY(), from.getZ()}, new int[]{recent.size[0], recent.size[1], recent.size[2]}, this, false, recent.getTowerType(), recent.getRoofType(), recent.getConeRounding(), recent.getRoofSizeY(), recent.getTowerRoofOffset());
+        return new Tower(new int[]{from.getX(), from.getY(), from.getZ()},
+                new int[]{recent.size[0], recent.size[1], recent.size[2]},
+                this, false, recent.getType(), recent.getRoofType(),
+                recent.getConeRounding(), recent.getRoofSizeY(), recent.getRoofOffset());
     }
 
     private @NotNull House getHouse(BlockPos from) {
         House recent = this.recentHouseSettings;
-        return new House(new int[]{from.getX(), from.getY(), from.getZ()}, new int[]{recent.size[0], recent.size[1], recent.size[2]}, this, false, recent.getHouseType(), recent.getRoofType(), recent.getSteppedGableType(), recent.getRoofOrientation());
+        return new House(new int[]{from.getX(), from.getY(), from.getZ()},
+                new int[]{recent.size[0], recent.size[1], recent.size[2]},
+                this, false, recent.getType(), recent.getRoofType(),
+                recent.getSteppedGableType(), recent.getRoofOrientation());
     }
 
     public BlockPos getHitResult() {

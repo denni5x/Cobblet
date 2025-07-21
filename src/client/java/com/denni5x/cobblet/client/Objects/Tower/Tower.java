@@ -3,16 +3,19 @@ package com.denni5x.cobblet.client.Objects.Tower;
 import com.denni5x.cobblet.client.CobbletTool;
 import com.denni5x.cobblet.client.Objects.CobbletObject;
 import com.denni5x.cobblet.client.Objects.Theme.Theme;
-import com.denni5x.cobblet.client.Objects.Theme.ThemeConfig;
 import com.denni5x.cobblet.client.Objects.Theme.ThemeRecord;
 import com.denni5x.cobblet.client.Raterization.HalfSphereRasterization;
 import com.denni5x.cobblet.client.Raterization.TubeRasterization;
 import com.moulberry.axiom.block_maps.HDVoxelMap;
+import com.moulberry.axiom.editor.ImGuiHelper;
 import com.moulberry.axiom.gizmo.Gizmo;
+import com.moulberry.axiom.i18n.AxiomI18n;
 import com.moulberry.axiom.rasterization.ConeRasterization;
 import com.moulberry.axiom.render.regions.ChunkedBlockRegion;
 import com.moulberry.axiom.tools.stamp.StampPlacement;
 import com.moulberry.axiom.tools.stamp.TransformedBlockRegions;
+import com.moulberry.axiom.world_modification.CompressedBlockEntity;
+import imgui.ImGui;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.minecraft.block.BlockState;
 import net.minecraft.util.math.BlockPos;
@@ -23,8 +26,6 @@ public class Tower extends CobbletObject {
     public int rotation;
     public boolean flipX = false;
     public boolean flipZ = false;
-    private Theme theme;
-    private ThemeConfig themeConfig;
     private TowerRoofType towerRoofType;
     private float coneRounding;
     private int roofSizeY;
@@ -33,16 +34,17 @@ public class Tower extends CobbletObject {
     public Tower(int[] position, int[] size, CobbletTool cobbletTool, boolean isRecord,
                  Theme theme, TowerRoofType towerRoofType, float coneRounding, int roofSizeY,
                  int towerRoofOffset) {
-        super(cobbletTool, isRecord);
-        this.theme = theme;
+        super.cobbletTool = cobbletTool;
+        super.isRecord = isRecord;
         this.towerRoofType = towerRoofType;
         this.position = position;
         this.size = size;
         this.coneRounding = coneRounding;
         this.roofSizeY = roofSizeY;
         this.towerRoofOffset = towerRoofOffset;
+        super.theme = theme;
+        super.themeConfig = ThemeRecord.getHouseConfig(this.theme);
         if (isRecord) return;
-        this.themeConfig = ThemeRecord.getHouseConfig(this.theme);
         this.setupGizmos();
         this.calcBlocks();
     }
@@ -64,6 +66,60 @@ public class Tower extends CobbletObject {
     public Tower copy() {
         return new Tower(this.position.clone(), this.size.clone(), super.cobbletTool, super.isRecord, this.theme,
                 this.towerRoofType, this.coneRounding, this.roofSizeY, this.towerRoofOffset);
+    }
+
+    public boolean displaySettings() {
+        boolean objectSettingsChanged = false;
+        int[] roofTypeInt = new int[]{TowerRoofType.valueOf(this.getRoofType().name()).ordinal()};
+        int[] towerType = new int[]{Theme.valueOf(this.getType().name()).ordinal()};
+        float[] coneRounding = new float[]{this.getConeRounding()};
+        int[] roofSizeY = new int[]{this.getRoofSizeY()};
+        int[] towerRoofOffset = new int[]{this.getRoofOffset()};
+        int[] size = this.getSize();
+        int[] height = new int[]{size[1]};
+        int[] width = new int[]{size[0]};
+
+        objectSettingsChanged |= ImGuiHelper.combo("Tower Type", towerType, new String[]{"Bricks", "Plain", "Desert"});
+        objectSettingsChanged |= ImGuiHelper.combo("Roof Type", roofTypeInt, new String[]{"Cone", "Half Sphere", "Offset Sphere", "Slabbed", "Flat"});
+        TowerRoofType towerRoofType = TowerRoofType.values()[roofTypeInt[0]];
+
+        ImGuiHelper.separatorWithText("General Settings");
+        if (!this.unlockXZWidth) {
+            objectSettingsChanged |= ImGui.sliderInt(AxiomI18n.get("axiom.tool.shape.height") + "##TowerHeight", height, 1, 64);
+            objectSettingsChanged |= ImGui.sliderInt(AxiomI18n.get("axiom.tool.shape.width") + "##TowerWidth", width, 1, 64);
+            if (height[0] < 1) height[0] = 1;
+            if (width[0] < 1) height[0] = 1;
+            size[0] = width[0];
+            size[1] = height[0];
+            size[2] = width[0];
+        } else {
+            if (ImGuiHelper.inputInt("Tower Size", size)) {
+                for (int i = 0; i < 2; i++) {
+                    if (size[i] < 1) size[i] = 1;
+                }
+                objectSettingsChanged = true;
+            }
+        }
+        if (ImGui.checkbox("Unlock Width", this.unlockXZWidth)) {
+            this.unlockXZWidth = !this.unlockXZWidth;
+        }
+
+        ImGuiHelper.separatorWithText("Roof Settings");
+        if (towerRoofType == TowerRoofType.OFFSET_SPHERE || towerRoofType == TowerRoofType.HALF_SPHERE || towerRoofType == TowerRoofType.CONE) {
+            objectSettingsChanged |= ImGui.sliderInt(AxiomI18n.get("axiom.tool.shape.height") + "##SizeY", roofSizeY, 1, 64);
+        }
+        if (towerRoofType == TowerRoofType.OFFSET_SPHERE) {
+            objectSettingsChanged |= ImGui.sliderInt("Roof Offset" + "##RoofOffset", towerRoofOffset, -64, 64);
+        }
+        if (towerRoofType == TowerRoofType.CONE) {
+            objectSettingsChanged |= ImGui.sliderFloat(AxiomI18n.get("axiom.tool.shape.cone.rounding"), coneRounding, 0.0F, 1.0F);
+        }
+
+        if (objectSettingsChanged) {
+            this.updateSettings(Theme.values()[towerType[0]], towerRoofType, coneRounding[0], roofSizeY[0], towerRoofOffset[0], size);
+            return true;
+        }
+        return false;
     }
 
     public void updateSettings(Theme theme, TowerRoofType towerRoofType, float coneRounding,
@@ -90,12 +146,14 @@ public class Tower extends CobbletObject {
         calcRoof(maxY);
 
         ChunkedBlockRegion copiedRegion = new ChunkedBlockRegion();
+        Long2ObjectOpenHashMap<CompressedBlockEntity> blockEntities = new Long2ObjectOpenHashMap<>();
         this.chunkedBlockRegion.forEachEntry(copiedRegion::addBlock);
-        TransformedBlockRegions transformedBlockRegions = new TransformedBlockRegions(copiedRegion, null);
+
+        TransformedBlockRegions transformedBlockRegions = new TransformedBlockRegions(copiedRegion, blockEntities);
 
         StampPlacement stampPlacement = new StampPlacement(
                 transformedBlockRegions.getBlocks(this.rotation, this.flipX, this.flipZ),
-                new Long2ObjectOpenHashMap<>(),
+                blockEntities,
                 transformedBlockRegions,
                 this.rotation, this.flipX, this.flipZ,
                 this.mainMoveGizmo.getTargetPosition().getX(),
@@ -106,13 +164,13 @@ public class Tower extends CobbletObject {
                 this.mainMoveGizmo.getTargetPosition().getZ());
 
         this.chunkedBlockRegion.clear();
-        stampPlacement.pasteInto(this.chunkedBlockRegion, new Long2ObjectOpenHashMap<>());
+        stampPlacement.pasteInto(this.chunkedBlockRegion, blockEntities);
     }
 
+    @Override
     public void updateGizmoState() {
         this.position = new int[]{this.mainMoveGizmo.getTargetPosition().getX(), this.mainMoveGizmo.getTargetPosition().getY(), this.mainMoveGizmo.getTargetPosition().getZ()};
         this.calcBlocks();
-        super.updateGizmoState();
     }
 
     public void updateGizmosFromPositionSize() {
@@ -126,6 +184,11 @@ public class Tower extends CobbletObject {
             }
         }
         this.mainMoveGizmo.moveTo(new BlockPos(this.position[0], this.position[1], this.position[2]));
+    }
+
+    @Override
+    public boolean renderSettings() {
+        return false;
     }
 
     private void calcRoof(int maxY) {
@@ -183,10 +246,6 @@ public class Tower extends CobbletObject {
         }
     }
 
-    public Theme getTowerType() {
-        return theme;
-    }
-
     public TowerRoofType getRoofType() {
         return towerRoofType;
     }
@@ -199,7 +258,7 @@ public class Tower extends CobbletObject {
         return roofSizeY;
     }
 
-    public int getTowerRoofOffset() {
+    public int getRoofOffset() {
         return towerRoofOffset;
     }
 
