@@ -6,7 +6,7 @@ import net.minecraft.block.BlockState;
 
 import java.util.Objects;
 
-public class TopWallObjectCalculation {
+public class TopWallCalculation {
     private static final int[] patternOffsetTopWallXAxis = new int[]{0, 0, 0};
     private static final int[] patternOffsetTopWallZAxis = new int[]{0, 0, 0};
     private static final int[] patternSizeTopWall = new int[]{0, 0, 0};

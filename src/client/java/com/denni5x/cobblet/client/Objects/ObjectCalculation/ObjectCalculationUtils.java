@@ -94,7 +94,7 @@ public class ObjectCalculationUtils {
                     RoofCalculation.calcLowAngle(chunkedBlockRegion, themeConfig, roofOrientation, minX, maxX, minZ, maxZ, maxY, slabRoof, fullRoof);
             case SLABBED -> RoofCalculation.calcWalledRoof(chunkedBlockRegion, minX, maxX, minZ, maxZ, maxY, slabRoof);
             case WALL_PATTERN ->
-                    TopWallObjectCalculation.topWall(themeConfig, chunkedBlockRegion, minX, maxX, maxY, minZ, maxZ);
+                    TopWallCalculation.topWall(themeConfig, chunkedBlockRegion, minX, maxX, maxY, minZ, maxZ);
             case WALLED ->
                     RoofCalculation.calcWalledRoof(chunkedBlockRegion, minX, maxX, minZ, maxZ, maxY, themeConfig.fullWallRoof());
             case THICK_WALLED ->

@@ -2,7 +2,7 @@ package com.denni5x.cobblet.client.Objects.House;
 
 import com.denni5x.cobblet.client.CobbletTool;
 import com.denni5x.cobblet.client.Objects.CobbletObject;
-import com.denni5x.cobblet.client.Objects.ObjectCalculation.InnerFloorObjectCalculation;
+import com.denni5x.cobblet.client.Objects.ObjectCalculation.InnerFloorCalculation;
 import com.denni5x.cobblet.client.Objects.ObjectCalculation.ObjectCalculationUtils;
 import com.denni5x.cobblet.client.Objects.ObjectCalculation.OuterWallObjectCalculation;
 import com.denni5x.cobblet.client.Objects.Theme.Theme;
@@ -10,6 +10,7 @@ import com.denni5x.cobblet.client.Objects.Theme.ThemeRecord;
 import com.moulberry.axiom.editor.ImGuiHelper;
 import com.moulberry.axiom.exceptions.FaultyImplementationError;
 import com.moulberry.axiom.gizmo.Gizmo;
+import com.moulberry.axiom.render.regions.ChunkedBlockRegion;
 import imgui.ImGui;
 import imgui.type.ImInt;
 import net.minecraft.util.math.BlockPos;
@@ -40,6 +41,7 @@ public class House extends CobbletObject {
     public House(int[] position, int[] size, CobbletTool cobbletTool, boolean isRecord, Theme gladeTheme, HouseRoofType houseRoofType, int steppedGableType, Direction.Axis roofOrientation) {
         super.cobbletTool = cobbletTool;
         super.isRecord = isRecord;
+        super.chunkedBlockRegion = new ChunkedBlockRegion();
         this.position = position;
         this.size = size;
         this.roofOrientation = roofOrientation;
@@ -159,7 +161,7 @@ public class House extends CobbletObject {
     }
 
     public void calcBlocks() {
-        this.chunkedBlockRegion.clear();
+        super.chunkedBlockRegion.clear();
         BlockPos pos1 = this.wallPos1Gizmo.getTargetPosition();
         BlockPos pos2 = this.wallPos2Gizmo.getTargetPosition();
         int minX = Math.min(pos1.getX(), pos2.getX());
@@ -169,11 +171,11 @@ public class House extends CobbletObject {
         int maxY = Math.max(pos1.getY(), pos2.getY());
         int maxZ = Math.max(pos1.getZ(), pos2.getZ());
 
-        OuterWallObjectCalculation.outerWalls(this.themeConfig, this.chunkedBlockRegion, minY, maxY, minX, maxX, minZ, maxZ,
+        OuterWallObjectCalculation.outerWalls(this.themeConfig, super.chunkedBlockRegion, minY, maxY, minX, maxX, minZ, maxZ,
                 this.patternOffsetFullWallXAxis, this.patternOffsetFullWallZAxis, this.patternSizeFullWall, this.patternSizeFullWall1R);
-        ObjectCalculationUtils.calcFloorCeiling(this.chunkedBlockRegion, this.themeConfig, minX, maxX, minZ, maxZ, minY, maxY);
-        ObjectCalculationUtils.roof(this.chunkedBlockRegion, this.themeConfig, this.steppedGableType, this.houseRoofType, this.roofOrientation, minX, maxX, minZ, maxZ, minY, maxY);
-        InnerFloorObjectCalculation.innerFloor(this.themeConfig, this.chunkedBlockRegion,
+        ObjectCalculationUtils.calcFloorCeiling(super.chunkedBlockRegion, this.themeConfig, minX, maxX, minZ, maxZ, minY, maxY);
+        ObjectCalculationUtils.roof(super.chunkedBlockRegion, this.themeConfig, this.steppedGableType, this.houseRoofType, this.roofOrientation, minX, maxX, minZ, maxZ, minY, maxY);
+        InnerFloorCalculation.innerFloor(this.themeConfig, super.chunkedBlockRegion,
                 minX + 1, maxX - 1, minY + 1, maxY - 1, minZ + 1, maxZ - 1,
                 this.patternOffsetFloor, this.patternSizeFloor);
     }

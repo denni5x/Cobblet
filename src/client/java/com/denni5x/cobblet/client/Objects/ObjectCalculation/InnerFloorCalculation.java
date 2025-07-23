@@ -6,7 +6,7 @@ import net.minecraft.block.BlockState;
 
 import java.util.Objects;
 
-public class InnerFloorObjectCalculation {
+public class InnerFloorCalculation {
     public static void innerFloor(ThemeConfig themeConfig, ChunkedBlockRegion chunkedBlockRegion,
                                   int minX, int maxX, int minY, int maxY, int minZ, int maxZ,
                                   int[] offset, int[] size) {

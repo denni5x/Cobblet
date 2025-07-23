@@ -6,6 +6,7 @@ import com.moulberry.axiom.blueprint.Blueprint;
 import com.moulberry.axiom.editor.ImGuiHelper;
 import com.moulberry.axiom.gizmo.Gizmo;
 import com.moulberry.axiom.i18n.AxiomI18n;
+import com.moulberry.axiom.render.regions.ChunkedBlockRegion;
 import com.moulberry.axiom.tools.stamp.StampPlacement;
 import com.moulberry.axiom.tools.stamp.TransformedBlockRegions;
 import imgui.ImGui;
@@ -27,6 +28,7 @@ public class BlueprintAsset extends CobbletObject {
         super.cobbletTool = cobbletTool;
         super.isRecord = isRecord;
         super.position = position;
+        super.chunkedBlockRegion = new ChunkedBlockRegion();
         this.offset = offset;
         this.blueprint = blueprint;
         if (isRecord) return;
